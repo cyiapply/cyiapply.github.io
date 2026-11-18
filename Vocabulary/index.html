@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f4efe6">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>單字卡</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Noto+Sans:wght@400;600;700&family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --ink: #241c16;
+      --muted: #8a7f72;
+      --line: rgba(70, 46, 22, 0.1);
+      --card: #fffdf9;
+      --learn: #1f7a4d;
+      --learn-soft: #e7f6ee;
+      --review: #c2410c;
+      --review-soft: #fff1e8;
+      --shadow: 0 18px 40px rgba(72, 42, 16, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    [hidden] { display: none !important; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+    }
+
+    body {
+      min-height: 100dvh;
+      color: var(--ink);
+      font-family: "Noto Sans TC", "PingFang TC", "Noto Sans CJK TC", "Microsoft JhengHei", sans-serif;
+      background:
+        radial-gradient(900px 420px at 50% -12%, #fff8ee 0%, transparent 60%),
+        linear-gradient(180deg, #f7f2ea 0%, #efe4d4 100%);
+      -webkit-font-smoothing: antialiased;
+      overscroll-behavior: none;
+    }
+
+    button, p { font: inherit; }
+
+    .app {
+      width: min(100%, 440px);
+      min-height: 100dvh;
+      margin: 0 auto;
+      padding:
+        max(18px, env(safe-area-inset-top))
+        max(16px, env(safe-area-inset-right))
+        max(14px, env(safe-area-inset-bottom))
+        max(16px, env(safe-area-inset-left));
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .top-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.35rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .count {
+      margin: 0;
+      color: var(--muted);
+      font-size: clamp(0.78rem, 3.4vw, 0.95rem);
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+    }
+
+    .bar {
+      margin-top: 10px;
+      height: 6px;
+      border-radius: 999px;
+      background: rgba(60, 40, 20, 0.08);
+      overflow: hidden;
+    }
+
+    .bar > span {
+      display: block;
+      height: 100%;
+      width: 0;
+      border-radius: inherit;
+      background: var(--learn);
+      transition: width 0.3s ease;
+    }
+
+    .stage {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      place-items: center;
+    }
+
+    .deck {
+      position: relative;
+      width: 100%;
+      height: min(100%, 580px);
+    }
+
+    .shadow {
+      position: absolute;
+      left: 50%;
+      border-radius: 28px;
+      background: rgba(255, 253, 249, 0.86);
+      border: 1px solid var(--line);
+      transform: translateX(-50%);
+    }
+
+    .shadow.s1 {
+      top: 12px;
+      width: calc(100% - 28px);
+      height: calc(100% - 24px);
+    }
+
+    .shadow.s2 {
+      top: 22px;
+      width: calc(100% - 56px);
+      height: calc(100% - 34px);
+      opacity: 0.7;
+    }
+
+    .card {
+      position: relative;
+      z-index: 1;
+      height: calc(100% - 28px);
+      padding: 28px 24px 24px;
+      border: 1px solid rgba(80, 52, 24, 0.08);
+      border-radius: 28px;
+      background: var(--card);
+      box-shadow: var(--shadow);
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      cursor: grab;
+      overflow: hidden;
+      transition: transform 0.28s ease, opacity 0.28s ease, background 0.2s ease;
+    }
+
+    .card.is-dragging {
+      cursor: grabbing;
+      transition: none;
+    }
+
+    .card-body {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 0;
+    }
+
+    .stamp {
+      position: absolute;
+      top: 26px;
+      padding: 4px 12px 6px;
+      border: 3px solid;
+      border-radius: 12px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .stamp.learn {
+      left: 20px;
+      color: var(--learn);
+      border-color: var(--learn);
+      transform: rotate(-14deg);
+    }
+
+    .stamp.review {
+      right: 20px;
+      color: var(--review);
+      border-color: var(--review);
+      transform: rotate(14deg);
+    }
+
+    .word {
+      margin: 0;
+      font-family: Fraunces, "Iowan Old Style", Palatino, "Songti TC", serif;
+      font-size: clamp(2.5rem, 12vw, 3.8rem);
+      font-weight: 560;
+      letter-spacing: -0.03em;
+      line-height: 1.05;
+      overflow-wrap: anywhere;
+    }
+
+    .phonetic {
+      margin: 12px 0 0;
+      color: #6f655b;
+      font-family: "Noto Sans", "Noto Sans TC", sans-serif;
+      font-size: 1.15rem;
+      letter-spacing: 0.01em;
+    }
+
+    .badge {
+      align-self: flex-start;
+      margin: 14px 0 0;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--review-soft);
+      color: var(--review);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .tap-hint {
+      margin: 22px 0 0;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .card.is-open .tap-hint { display: none; }
+
+    .extra {
+      display: grid;
+      grid-template-rows: 0fr;
+      opacity: 0;
+      transition: grid-template-rows 0.32s ease, opacity 0.32s ease;
+    }
+
+    .card.is-open .extra {
+      grid-template-rows: 1fr;
+      opacity: 1;
+      margin-top: 22px;
+    }
+
+    .extra-inner {
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .meaning {
+      margin: 0;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      font-size: 1.28rem;
+      font-weight: 700;
+      line-height: 1.55;
+    }
+
+    .example {
+      margin: 14px 0 0;
+      padding-left: 12px;
+      border-left: 3px solid #ead9bf;
+      color: #3d342c;
+      font-size: 1.02rem;
+      line-height: 1.6;
+    }
+
+    .example-zh {
+      margin: 6px 0 0;
+      padding-left: 15px;
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
+
+    .swipe-hint {
+      margin: 0;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .actions button {
+      min-height: 52px;
+      border-radius: 999px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .actions button:focus-visible,
+    .again:focus-visible {
+      outline: 3px solid #e7b089;
+      outline-offset: 2px;
+    }
+
+    #btnReview {
+      border: 1.5px solid rgba(194, 65, 12, 0.45);
+      background: #fff;
+      color: var(--review);
+    }
+
+    #btnLearn,
+    .again {
+      border: 0;
+      background: var(--learn);
+      color: white;
+    }
+
+    .done {
+      width: 100%;
+      padding: 36px 24px;
+      border-radius: 28px;
+      background: var(--card);
+      box-shadow: var(--shadow);
+      text-align: center;
+    }
+
+    .done h2 {
+      margin: 0;
+      font-family: Fraunces, Palatino, serif;
+      font-size: 2rem;
+      font-weight: 560;
+    }
+
+    .done p {
+      margin: 14px 0 0;
+      color: #5c534b;
+      line-height: 1.7;
+    }
+
+    .again {
+      margin-top: 22px;
+      min-height: 52px;
+      padding: 0 28px;
+      border-radius: 999px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    @media (max-width: 360px) {
+      .top-row {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .count { text-align: left; }
+      .card { padding: 22px 18px 18px; }
+      .meaning { font-size: 1.12rem; }
+    }
+
+    @media (min-width: 800px) {
+      body {
+        display: grid;
+        place-items: center;
+      }
+
+      .app {
+        min-height: min(100dvh, 900px);
+        height: min(100dvh, 900px);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        transition: none !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <header>
+      <div class="top-row">
+        <h1>單字卡</h1>
+        <p class="count" id="count">學會 0/8 · 待複習 0</p>
+      </div>
+      <div class="bar" aria-hidden="true"><span id="barFill"></span></div>
+    </header>
+
+    <section class="stage">
+      <div class="deck" id="deck">
+        <div class="shadow s2" aria-hidden="true"></div>
+        <div class="shadow s1" aria-hidden="true"></div>
+        <article class="card" id="card" tabindex="0" aria-describedby="swipeHint">
+          <div class="stamp learn" id="stampLearn" aria-hidden="true">學會</div>
+          <div class="stamp review" id="stampReview" aria-hidden="true">複習</div>
+          <div class="card-body">
+            <p class="word" id="word" lang="en" aria-live="polite"></p>
+            <p class="phonetic" id="phonetic" lang="en" dir="ltr"></p>
+            <p class="badge" id="badge" hidden>待複習</p>
+            <p class="tap-hint" id="tapHint">點一下，看中文與例句</p>
+            <div class="extra" id="extra">
+              <div class="extra-inner">
+                <p class="meaning" id="meaning"></p>
+                <p class="example" id="example" lang="en"></p>
+                <p class="example-zh" id="exampleZh"></p>
+              </div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <section class="done" id="done" hidden>
+        <h2>這輪都學會了</h2>
+        <p id="doneText"></p>
+        <button class="again" id="again" type="button">再練一輪</button>
+      </section>
+    </section>
+
+    <p class="swipe-hint" id="swipeHint">左滑代表不熟悉，右滑代表學會</p>
+    <div class="actions" id="actions">
+      <button id="btnReview" type="button">← 不熟悉</button>
+      <button id="btnLearn" type="button">學會 →</button>
+    </div>
+  </main>
+
+  <script>
+    // 之後換成自己的字庫時，改這個陣列即可。
+    const WORDS = [
+      {
+        word: "abundant",
+        phonetic: "/əˈbʌndənt/",
+        meaning: "豐富的；大量的",
+        example: "The valley is abundant in wildflowers.",
+        exampleZh: "這座山谷裡野花開得很茂盛。"
+      },
+      {
+        word: "cautious",
+        phonetic: "/ˈkɔːʃəs/",
+        meaning: "小心的；謹慎的",
+        example: "Be cautious when you cross the busy street.",
+        exampleZh: "過這條車多的馬路時要小心。"
+      },
+      {
+        word: "delicate",
+        phonetic: "/ˈdelɪkət/",
+        meaning: "精緻的；容易損壞的",
+        example: "Please handle the delicate glass with care.",
+        exampleZh: "請小心拿這個易碎的玻璃。"
+      },
+      {
+        word: "genuine",
+        phonetic: "/ˈdʒenjuɪn/",
+        meaning: "真誠的；真正的",
+        example: "She gave me a genuine smile.",
+        exampleZh: "她給了我一個真誠的微笑。"
+      },
+      {
+        word: "hesitate",
+        phonetic: "/ˈhezɪteɪt/",
+        meaning: "猶豫；遲疑",
+        example: "Don't hesitate to ask if you need help.",
+        exampleZh: "需要幫忙的話，別猶豫，直接問。"
+      },
+      {
+        word: "immense",
+        phonetic: "/ɪˈmens/",
+        meaning: "巨大的；非常廣大的",
+        example: "The sky felt immense above the open field.",
+        exampleZh: "空曠田野上的天空顯得非常遼闊。"
+      },
+      {
+        word: "patient",
+        phonetic: "/ˈpeɪʃnt/",
+        meaning: "有耐心的",
+        example: "A good teacher is patient with beginners.",
+        exampleZh: "好的老師對初學者很有耐心。"
+      },
+      {
+        word: "vivid",
+        phonetic: "/ˈvɪvɪd/",
+        meaning: "生動的；色彩鮮明的",
+        example: "I still have a vivid memory of that summer.",
+        exampleZh: "那個夏天我到現在還記得很清楚。"
+      }
+    ];
+
+    const TAP_SLOP = 8;
+    const card = document.getElementById("card");
+    const deck = document.getElementById("deck");
+    const done = document.getElementById("done");
+    const doneText = document.getElementById("doneText");
+    const actions = document.getElementById("actions");
+    const swipeHint = document.getElementById("swipeHint");
+    const wordEl = document.getElementById("word");
+    const phoneticEl = document.getElementById("phonetic");
+    const meaningEl = document.getElementById("meaning");
+    const exampleEl = document.getElementById("example");
+    const exampleZhEl = document.getElementById("exampleZh");
+    const badge = document.getElementById("badge");
+    const extra = document.getElementById("extra");
+    const countEl = document.getElementById("count");
+    const barFill = document.getElementById("barFill");
+    const stampLearn = document.getElementById("stampLearn");
+    const stampReview = document.getElementById("stampReview");
+
+    let queue = [];
+    let learned = [];
+    let reviewMarks = 0;
+    let busy = false;
+    let pointerId = null;
+    let startX = 0;
+    let startY = 0;
+    let dx = 0;
+    let dy = 0;
+    let dragging = false;
+
+    function freshQueue() {
+      return WORDS.map((item, index) => ({ ...item, id: index, review: false }));
+    }
+
+    function resetDeck() {
+      queue = freshQueue();
+      learned = [];
+      reviewMarks = 0;
+      busy = false;
+      done.hidden = true;
+      deck.hidden = false;
+      actions.hidden = false;
+      swipeHint.hidden = false;
+      clearMotion();
+      render();
+    }
+
+    function render() {
+      const total = WORDS.length;
+      const learnedCount = learned.length;
+      const waiting = queue.filter((item) => item.review).length;
+      countEl.textContent = `學會 ${learnedCount}/${total} · 待複習 ${waiting}`;
+      barFill.style.width = `${(learnedCount / total) * 100}%`;
+
+      if (!queue.length) {
+        deck.hidden = true;
+        actions.hidden = true;
+        swipeHint.hidden = true;
+        done.hidden = false;
+        doneText.textContent = reviewMarks
+          ? `學會 ${total} 張。途中有 ${reviewMarks} 次左滑，那些單字後來也都學會了。`
+          : `學會 ${total} 張。這輪沒有需要再複習的單字。`;
+        return;
+      }
+
+      const item = queue[0];
+      wordEl.textContent = item.word;
+      phoneticEl.textContent = item.phonetic;
+      meaningEl.textContent = item.meaning;
+      exampleEl.textContent = item.example;
+      exampleZhEl.textContent = item.exampleZh;
+      badge.hidden = !item.review;
+      card.classList.remove("is-open");
+      extra.setAttribute("aria-hidden", "true");
+      card.setAttribute("aria-label", `${item.word}，點一下顯示中文與例句`);
+    }
+
+    function toggleReveal() {
+      const open = card.classList.toggle("is-open");
+      extra.setAttribute("aria-hidden", open ? "false" : "true");
+    }
+
+    function setStamps(distance) {
+      const width = card.offsetWidth || 300;
+      const threshold = Math.min(110, width * 0.26);
+      const amount = Math.min(Math.abs(distance) / threshold, 1);
+      stampLearn.style.opacity = distance > 0 ? String(amount) : "0";
+      stampReview.style.opacity = distance < 0 ? String(amount) : "0";
+      if (distance > 12) card.style.background = "#f3fbf6";
+      else if (distance < -12) card.style.background = "#fff7f3";
+      else card.style.background = "";
+    }
+
+    function clearMotion() {
+      card.classList.remove("is-dragging");
+      card.style.transition = "";
+      card.style.transform = "";
+      card.style.opacity = "";
+      card.style.background = "";
+      stampLearn.style.opacity = "0";
+      stampReview.style.opacity = "0";
+    }
+
+    function settle(known) {
+      const current = queue.shift();
+      if (known) {
+        learned.push(current);
+      } else {
+        current.review = true;
+        reviewMarks += 1;
+        queue.push(current);
+      }
+      clearMotion();
+      card.style.transition = "none";
+      card.style.opacity = "0";
+      card.style.transform = "translateY(12px) scale(0.98)";
+      render();
+      requestAnimationFrame(() => {
+        card.style.transition = "";
+        card.style.opacity = "";
+        card.style.transform = "";
+        busy = false;
+      });
+    }
+
+    function fly(direction) {
+      if (busy || !queue.length) return;
+      busy = true;
+      const known = direction > 0;
+      card.classList.remove("is-dragging");
+      setStamps(known ? 200 : -200);
+      card.style.transition = "transform .32s ease, opacity .32s ease";
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      let finished = false;
+      const finish = (event) => {
+        if (event && event.propertyName && event.propertyName !== "transform") return;
+        if (finished) return;
+        finished = true;
+        card.removeEventListener("transitionend", finish);
+        settle(known);
+      };
+      if (reduce) {
+        finish();
+        return;
+      }
+      requestAnimationFrame(() => {
+        card.style.transform = `translateX(${known ? 125 : -125}%) rotate(${known ? 16 : -16}deg)`;
+        card.style.opacity = "0.15";
+      });
+      card.addEventListener("transitionend", finish);
+      setTimeout(finish, 420);
+    }
+
+    function snapBack() {
+      card.classList.remove("is-dragging");
+      card.style.transition = "transform .28s ease, background .2s ease";
+      card.style.transform = "";
+      card.style.background = "";
+      stampLearn.style.opacity = "0";
+      stampReview.style.opacity = "0";
+    }
+
+    card.addEventListener("pointerdown", (event) => {
+      if (busy || !queue.length || event.button !== 0) return;
+      pointerId = event.pointerId;
+      startX = event.clientX;
+      startY = event.clientY;
+      dx = 0;
+      dy = 0;
+      dragging = false;
+      card.setPointerCapture(event.pointerId);
+      card.classList.add("is-dragging");
+      card.style.transition = "none";
+    });
+
+    card.addEventListener("pointermove", (event) => {
+      if (event.pointerId !== pointerId) return;
+      dx = event.clientX - startX;
+      dy = event.clientY - startY;
+      if (!dragging && Math.hypot(dx, dy) > TAP_SLOP) dragging = true;
+      if (!dragging) return;
+      card.style.transform = `translateX(${dx}px) rotate(${dx / 22}deg)`;
+      setStamps(dx);
+    });
+
+    function endPointer(event) {
+      if (event.pointerId !== pointerId) return;
+      pointerId = null;
+      const width = card.offsetWidth || 300;
+      const threshold = Math.min(110, width * 0.26);
+      const horizontal = Math.abs(dx) > threshold && Math.abs(dx) > Math.abs(dy);
+      if (dragging && horizontal) {
+        fly(dx > 0 ? 1 : -1);
+      } else if (dragging) {
+        snapBack();
+      } else {
+        card.classList.remove("is-dragging");
+        toggleReveal();
+      }
+      dragging = false;
+      dx = 0;
+      dy = 0;
+    }
+
+    card.addEventListener("pointerup", endPointer);
+    card.addEventListener("pointercancel", endPointer);
+
+    document.getElementById("btnReview").addEventListener("click", () => fly(-1));
+    document.getElementById("btnLearn").addEventListener("click", () => fly(1));
+    document.getElementById("again").addEventListener("click", resetDeck);
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowRight") {
+        event.preventDefault();
+        fly(1);
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        fly(-1);
+      } else if ((event.key === "Enter" || event.key === " ") && !event.target.closest("button")) {
+        event.preventDefault();
+        if (!busy && queue.length) toggleReveal();
+      }
+    });
+
+    resetDeck();
+  </script>
+</body>
+</html>
