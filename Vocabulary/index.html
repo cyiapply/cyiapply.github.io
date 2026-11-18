@@ -488,10 +488,49 @@
     .func-bar {
       flex: none;
       min-height: 64px;
+      padding: 10px;
       border-radius: 22px;
       background: rgba(255, 253, 249, 0.9);
       border: 1px solid var(--line);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
     }
+
+    .func-btn {
+      flex: 1 1 120px;
+      min-height: 44px;
+      border: 1px solid rgba(80, 52, 24, 0.12);
+      border-radius: 999px;
+      background: #fff8ef;
+      color: var(--ink);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+    }
+
+    .func-btn:hover,
+    .func-btn:focus-visible {
+      background: #fff;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(31, 122, 77, 0.16);
+    }
+
+    .func-btn:disabled {
+      opacity: 0.6;
+      cursor: progress;
+    }
+
+    .func-status {
+      flex: 1 0 100%;
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+
+    .func-status:empty { display: none; }
 
     .done {
       width: 100%;
@@ -632,12 +671,18 @@
       </section>
     </section>
 
-    <nav class="func-bar" id="funcBar" aria-label="功能列"></nav>
+    <nav class="func-bar" id="funcBar" aria-label="功能列">
+      <button class="func-btn" id="importBtn" type="button">匯入</button>
+      <button class="func-btn" id="exportBtn" type="button">匯出</button>
+      <input id="importFile" type="file" accept=".txt,text/plain" hidden>
+      <p class="func-status" id="funcStatus" aria-live="polite"></p>
+    </nav>
   </main>
 
+  <script src="src/vocab-import.js"></script>
   <script>
-    // 之後換成自己的字庫時，改這個陣列即可。
-    const WORDS = [
+    // 內建的單字卡。匯入的 txt 會加在後面，不會蓋掉這組。
+    const BASE_WORDS = [
       {
         word: "abundant",
         phoneticUk: "/əˈbʌndənt/",
@@ -819,7 +864,7 @@
     }
 
     function freshQueue() {
-      return WORDS.map((item, index) => ({ ...item, id: index, review: false }));
+      return deckWords.map((item, index) => ({ ...item, id: index, review: false }));
     }
 
     function resetDeck() {
@@ -891,7 +936,7 @@
 
     function render() {
       stopSpeech();
-      const total = WORDS.length;
+      const total = deckWords.length;
       const learnedCount = learned.length;
       const waiting = queue.filter((item) => item.review).length;
       countEl.textContent = `學會 ${learnedCount}/${total} · 待複習 ${waiting}`;
@@ -902,7 +947,6 @@
         coach.hidden = true;
         deck.classList.remove("is-coaching");
         deck.hidden = true;
-        funcBar.hidden = true;
         done.hidden = false;
         doneText.textContent = reviewMarks
           ? `學會 ${total} 張。途中有 ${reviewMarks} 次左滑，那些單字後來也都學會了。`
@@ -912,7 +956,6 @@
 
       deck.hidden = false;
       done.hidden = true;
-      funcBar.hidden = false;
       paintCoach();
 
       const item = queue[0];
@@ -926,6 +969,8 @@
       meaningEl.textContent = item.meaning;
       exampleEl.textContent = item.example;
       exampleZhEl.textContent = item.exampleZh;
+      exampleEl.hidden = !item.example;
+      exampleZhEl.hidden = !item.exampleZh;
       badge.hidden = !item.review;
       card.classList.remove("is-open");
       extra.setAttribute("aria-hidden", "true");
@@ -1144,6 +1189,50 @@
         }
       }
     });
+
+    function syncQueuesFromDeck() {
+      const byKey = new Map(deckWords.map((item) => [VocabImport.wordKey(item.word), item]));
+      const apply = (card) => {
+        const source = byKey.get(VocabImport.wordKey(card.word));
+        if (!source) return;
+        card.phoneticUk = source.phoneticUk;
+        card.phoneticUs = source.phoneticUs;
+        card.meaning = source.meaning;
+        card.example = source.example;
+        card.exampleZh = source.exampleZh;
+      };
+      queue.forEach(apply);
+      learned.forEach(apply);
+    }
+
+    function showImportedCards(added) {
+      if (!added.length) return;
+      const cards = added.map((item) => ({
+        ...item,
+        id: deckWords.indexOf(item),
+        review: false
+      }));
+      queue = cards.concat(queue);
+      clearMotion();
+      busy = false;
+      render();
+    }
+
+    let deckWords = VocabImport.start({
+      baseWords: BASE_WORDS,
+      onChange(event) {
+        const added = event.added || [];
+        if (added.length) {
+          syncQueuesFromDeck();
+          showImportedCards(added);
+          return;
+        }
+        if (!event.refresh) return;
+        if (event.word && queue[0] && VocabImport.wordKey(queue[0].word) !== VocabImport.wordKey(event.word)) return;
+        syncQueuesFromDeck();
+        render();
+      }
+    }).words;
 
     queue = freshQueue();
     render();
