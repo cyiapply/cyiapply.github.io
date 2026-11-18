@@ -201,12 +201,64 @@
       overflow-wrap: anywhere;
     }
 
+    .phonetic-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .phonetic-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
     .phonetic {
-      margin: 12px 0 0;
+      margin: 0;
       color: #6f655b;
       font-family: "Noto Sans", "Noto Sans TC", sans-serif;
       font-size: 1.15rem;
       letter-spacing: 0.01em;
+    }
+
+    .speak {
+      flex: none;
+      height: 36px;
+      padding: 0 10px 0 8px;
+      border: 1px solid rgba(80, 52, 24, 0.12);
+      border-radius: 999px;
+      background: #fff8ef;
+      color: #6f655b;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      cursor: pointer;
+      touch-action: manipulation;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .speak svg {
+      width: 15px;
+      height: 15px;
+      display: block;
+    }
+
+    .speak:hover,
+    .speak:focus-visible {
+      color: var(--ink);
+      background: #fff;
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(31, 122, 77, 0.16);
+    }
+
+    .speak.is-speaking {
+      color: var(--learn);
+      background: var(--learn-soft);
+      border-color: transparent;
     }
 
     .badge {
@@ -394,7 +446,28 @@
           <div class="stamp review" id="stampReview" aria-hidden="true">複習</div>
           <div class="card-body">
             <p class="word" id="word" lang="en" aria-live="polite"></p>
-            <p class="phonetic" id="phonetic" lang="en" dir="ltr"></p>
+            <div class="phonetic-list">
+              <div class="phonetic-row">
+                <p class="phonetic" id="phoneticUk" lang="en" dir="ltr"></p>
+                <button class="speak" type="button" data-accent="en-GB" aria-label="播放英國腔">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 10v4h3l5 4V6L7 10H4z"></path>
+                    <path d="M16.5 8.5a5 5 0 0 1 0 7"></path>
+                  </svg>
+                  <span>UK</span>
+                </button>
+              </div>
+              <div class="phonetic-row">
+                <p class="phonetic" id="phoneticUs" lang="en" dir="ltr"></p>
+                <button class="speak" type="button" data-accent="en-US" aria-label="播放美國腔">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 10v4h3l5 4V6L7 10H4z"></path>
+                    <path d="M16.5 8.5a5 5 0 0 1 0 7"></path>
+                  </svg>
+                  <span>US</span>
+                </button>
+              </div>
+            </div>
             <p class="badge" id="badge" hidden>待複習</p>
             <p class="tap-hint" id="tapHint">點一下，看中文與例句</p>
             <div class="extra" id="extra">
@@ -427,56 +500,64 @@
     const WORDS = [
       {
         word: "abundant",
-        phonetic: "/əˈbʌndənt/",
+        phoneticUk: "/əˈbʌndənt/",
+        phoneticUs: "/əˈbʌndənt/",
         meaning: "豐富的；大量的",
         example: "The valley is abundant in wildflowers.",
         exampleZh: "這座山谷裡野花開得很茂盛。"
       },
       {
         word: "cautious",
-        phonetic: "/ˈkɔːʃəs/",
+        phoneticUk: "/ˈkɔːʃəs/",
+        phoneticUs: "/ˈkɑːʃəs/",
         meaning: "小心的；謹慎的",
         example: "Be cautious when you cross the busy street.",
         exampleZh: "過這條車多的馬路時要小心。"
       },
       {
         word: "delicate",
-        phonetic: "/ˈdelɪkət/",
+        phoneticUk: "/ˈdelɪkət/",
+        phoneticUs: "/ˈdeləkət/",
         meaning: "精緻的；容易損壞的",
         example: "Please handle the delicate glass with care.",
         exampleZh: "請小心拿這個易碎的玻璃。"
       },
       {
         word: "genuine",
-        phonetic: "/ˈdʒenjuɪn/",
+        phoneticUk: "/ˈdʒenjuɪn/",
+        phoneticUs: "/ˈdʒenjuən/",
         meaning: "真誠的；真正的",
         example: "She gave me a genuine smile.",
         exampleZh: "她給了我一個真誠的微笑。"
       },
       {
         word: "hesitate",
-        phonetic: "/ˈhezɪteɪt/",
+        phoneticUk: "/ˈhezɪteɪt/",
+        phoneticUs: "/ˈhezəteɪt/",
         meaning: "猶豫；遲疑",
         example: "Don't hesitate to ask if you need help.",
         exampleZh: "需要幫忙的話，別猶豫，直接問。"
       },
       {
         word: "immense",
-        phonetic: "/ɪˈmens/",
+        phoneticUk: "/ɪˈmens/",
+        phoneticUs: "/ɪˈmens/",
         meaning: "巨大的；非常廣大的",
         example: "The sky felt immense above the open field.",
         exampleZh: "空曠田野上的天空顯得非常遼闊。"
       },
       {
         word: "patient",
-        phonetic: "/ˈpeɪʃnt/",
+        phoneticUk: "/ˈpeɪʃnt/",
+        phoneticUs: "/ˈpeɪʃnt/",
         meaning: "有耐心的",
         example: "A good teacher is patient with beginners.",
         exampleZh: "好的老師對初學者很有耐心。"
       },
       {
         word: "vivid",
-        phonetic: "/ˈvɪvɪd/",
+        phoneticUk: "/ˈvɪvɪd/",
+        phoneticUs: "/ˈvɪvɪd/",
         meaning: "生動的；色彩鮮明的",
         example: "I still have a vivid memory of that summer.",
         exampleZh: "那個夏天我到現在還記得很清楚。"
@@ -491,7 +572,9 @@
     const actions = document.getElementById("actions");
     const swipeHint = document.getElementById("swipeHint");
     const wordEl = document.getElementById("word");
-    const phoneticEl = document.getElementById("phonetic");
+    const phoneticUkEl = document.getElementById("phoneticUk");
+    const phoneticUsEl = document.getElementById("phoneticUs");
+    const speakButtons = Array.from(document.querySelectorAll(".speak"));
     const meaningEl = document.getElementById("meaning");
     const exampleEl = document.getElementById("example");
     const exampleZhEl = document.getElementById("exampleZh");
@@ -512,6 +595,53 @@
     let dx = 0;
     let dy = 0;
     let dragging = false;
+    let speakToken = 0;
+
+    function accentVoice(lang) {
+      if (!window.speechSynthesis) return null;
+      const voices = window.speechSynthesis.getVoices();
+      const prefix = lang.toLowerCase();
+      return voices.find((voice) => voice.lang.toLowerCase() === prefix)
+        || voices.find((voice) => voice.lang.toLowerCase().startsWith(prefix))
+        || null;
+    }
+
+    function stopSpeech() {
+      speakToken += 1;
+      speakButtons.forEach((button) => button.classList.remove("is-speaking"));
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
+    }
+
+    function speakCurrent(lang) {
+      const item = queue[0];
+      const button = speakButtons.find((candidate) => candidate.dataset.accent === lang);
+      if (!item || !button || !window.speechSynthesis) return;
+      const synth = window.speechSynthesis;
+      const restart = synth.speaking || synth.pending;
+      if (restart) stopSpeech();
+      else {
+        speakToken += 1;
+        speakButtons.forEach((candidate) => candidate.classList.remove("is-speaking"));
+      }
+      const token = speakToken;
+      const utterance = new SpeechSynthesisUtterance(item.word);
+      utterance.lang = lang;
+      utterance.rate = 0.92;
+      const voice = accentVoice(lang);
+      if (voice) utterance.voice = voice;
+      const finish = () => {
+        if (token === speakToken) button.classList.remove("is-speaking");
+      };
+      utterance.onend = finish;
+      utterance.onerror = finish;
+      const start = () => {
+        if (token !== speakToken) return;
+        button.classList.add("is-speaking");
+        synth.speak(utterance);
+      };
+      if (restart) window.setTimeout(start, 50);
+      else start();
+    }
 
     function freshQueue() {
       return WORDS.map((item, index) => ({ ...item, id: index, review: false }));
@@ -531,6 +661,7 @@
     }
 
     function render() {
+      stopSpeech();
       const total = WORDS.length;
       const learnedCount = learned.length;
       const waiting = queue.filter((item) => item.review).length;
@@ -550,7 +681,12 @@
 
       const item = queue[0];
       wordEl.textContent = item.word;
-      phoneticEl.textContent = item.phonetic;
+      phoneticUkEl.textContent = item.phoneticUk;
+      phoneticUsEl.textContent = item.phoneticUs;
+      speakButtons.forEach((button) => {
+        const label = button.dataset.accent === "en-GB" ? "英國腔" : "美國腔";
+        button.setAttribute("aria-label", `播放 ${item.word} 的${label}`);
+      });
       meaningEl.textContent = item.meaning;
       exampleEl.textContent = item.example;
       exampleZhEl.textContent = item.exampleZh;
@@ -610,6 +746,7 @@
 
     function fly(direction) {
       if (busy || !queue.length) return;
+      stopSpeech();
       busy = true;
       const known = direction > 0;
       card.classList.remove("is-dragging");
@@ -647,6 +784,7 @@
 
     card.addEventListener("pointerdown", (event) => {
       if (busy || !queue.length || event.button !== 0) return;
+      if (event.target.closest(".speak")) return;
       pointerId = event.pointerId;
       startX = event.clientX;
       startY = event.clientY;
@@ -689,6 +827,17 @@
 
     card.addEventListener("pointerup", endPointer);
     card.addEventListener("pointercancel", endPointer);
+
+    speakButtons.forEach((button) => {
+      button.addEventListener("pointerdown", (event) => {
+        event.stopPropagation();
+      });
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        speakCurrent(button.dataset.accent);
+      });
+      if (!window.speechSynthesis) button.hidden = true;
+    });
 
     document.getElementById("btnReview").addEventListener("click", () => fly(-1));
     document.getElementById("btnLearn").addEventListener("click", () => fly(1));
