@@ -392,9 +392,110 @@
       animation: nudge-right 1.05s ease-in-out infinite;
     }
 
-    .coach-nudge.tap {
+    .coach-nudge.tap,
+    .coach-nudge.info {
       color: var(--ink);
       animation: nudge-tap 1.05s ease-in-out infinite;
+    }
+
+    .coach.is-info {
+      justify-content: flex-end;
+    }
+
+    .coach.is-info .coach-head,
+    .coach.is-info .coach-text,
+    .coach.is-info .coach-dots {
+      max-width: none;
+    }
+
+    .coach.is-info .coach-panel {
+      max-height: 100%;
+      overflow: auto;
+      pointer-events: auto;
+      padding: 16px 16px 14px;
+      background: #fffdf9;
+      border-color: rgba(31, 122, 77, 0.28);
+    }
+
+    .coach-pills {
+      display: flex;
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .coach-pills span {
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: var(--learn-soft);
+      color: var(--learn);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .coach-recipe {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 10px;
+      margin-top: 10px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: #fff8ef;
+      border: 1px solid rgba(80, 52, 24, 0.08);
+    }
+
+    .coach-recipe span {
+      display: block;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+    }
+
+    .coach-recipe strong {
+      display: block;
+      margin-top: 3px;
+      font-size: 0.92rem;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    .coach-recipe .ipa {
+      color: #6f655b;
+      font-family: "Noto Sans", sans-serif;
+      font-weight: 600;
+      font-size: 0.84rem;
+    }
+
+    .coach-sample {
+      display: block;
+      width: 100%;
+      height: clamp(108px, 20vh, 156px);
+      margin-top: 12px;
+      border-radius: 14px;
+      object-fit: cover;
+      object-position: left top;
+      box-shadow: 0 8px 18px rgba(36, 28, 22, 0.12);
+    }
+
+    .coach-caption {
+      margin: 6px 2px 0;
+      color: var(--muted);
+      font-size: 0.78rem;
+      line-height: 1.45;
+    }
+
+    .coach-json {
+      margin: 12px 0 0;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: #2a241f;
+      color: #f6f1ea;
+      font-family: "Noto Sans", ui-monospace, monospace;
+      font-size: 0.78rem;
+      line-height: 1.6;
+      white-space: pre;
+      overflow: auto;
     }
 
     .coach-panel {
@@ -410,6 +511,8 @@
 
     .coach-panel.review { border-color: rgba(194, 65, 12, 0.38); }
     .coach-panel.learn { border-color: rgba(31, 122, 77, 0.38); }
+    .coach-panel.info { border-color: rgba(31, 122, 77, 0.28); }
+    .coach-panel.info .coach-title { color: var(--learn); }
 
     .coach.is-wrong .coach-panel { animation: coach-shake 0.36s ease; }
 
@@ -437,10 +540,17 @@
       line-height: 1.55;
     }
 
+    .coach-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 12px;
+    }
+
     .coach-dots {
       display: flex;
       gap: 6px;
-      margin-top: 10px;
     }
 
     .coach-dots span {
@@ -451,6 +561,25 @@
     }
 
     .coach-dots span.is-current { background: var(--ink); }
+
+    .coach-next {
+      position: sticky;
+      bottom: 0;
+      pointer-events: auto;
+      min-height: 40px;
+      padding: 0 18px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--learn);
+      color: #fff;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .coach-next:focus-visible {
+      outline: 3px solid #e7b089;
+      outline-offset: 2px;
+    }
 
     .again {
       border: 0;
@@ -483,6 +612,11 @@
       40% { transform: translateX(7px); }
       60% { transform: translateX(-4px); }
       80% { transform: translateX(4px); }
+    }
+
+    @keyframes guide-pulse {
+      0%, 100% { box-shadow: 0 0 0 3px rgba(31, 122, 77, 0.28); }
+      50% { box-shadow: 0 0 0 7px rgba(31, 122, 77, 0.08); }
     }
 
     .func-bar {
@@ -520,6 +654,29 @@
     .func-btn:disabled {
       opacity: 0.6;
       cursor: progress;
+    }
+
+    .func-btn.is-locked,
+    .func-btn.is-locked:hover,
+    .func-btn.is-locked:focus-visible {
+      filter: grayscale(1);
+      opacity: 0.45;
+      cursor: not-allowed;
+      background: #fff8ef;
+      box-shadow: none;
+    }
+
+    .func-btn.is-guide,
+    .func-btn.is-locked.is-guide,
+    .func-btn.is-locked.is-guide:hover,
+    .func-btn.is-locked.is-guide:focus-visible {
+      filter: none;
+      opacity: 1;
+      cursor: default;
+      background: #fff;
+      border-color: var(--learn);
+      box-shadow: 0 0 0 3px rgba(31, 122, 77, 0.28);
+      animation: guide-pulse 1.4s ease-in-out infinite;
     }
 
     .func-status {
@@ -579,6 +736,7 @@
       .count { text-align: left; }
       .card { padding: 22px 18px 18px; }
       .meaning { font-size: 1.12rem; }
+      .coach-recipe { grid-template-columns: 1fr; gap: 8px; }
     }
 
     @media (min-width: 800px) {
@@ -664,7 +822,23 @@
               </div>
             </div>
             <p class="coach-text" id="coachText">往左滑這張卡片。還不熟的單字會再出現。</p>
-            <div class="coach-dots" id="coachDots" aria-hidden="true"><span class="is-current"></span><span></span><span></span></div>
+            <div class="coach-pills" id="coachPills" hidden><span>.txt</span><span>.json</span></div>
+            <div class="coach-recipe" id="coachRecipe" hidden>
+              <div><span>單字</span><strong>reasonably</strong></div>
+              <div><span>音標</span><strong class="ipa">/ˈriː.zən.ə.bli/</strong></div>
+              <div><span>中文</span><strong>理性地</strong></div>
+            </div>
+            <img class="coach-sample" id="coachSample" src="img/Sample.png" alt="匯入 txt 範例：每一行是單字、音標、中文說明" hidden>
+            <p class="coach-caption" id="coachCaption" hidden>音標放在兩條斜線中間，後面接著中文說明。</p>
+            <pre class="coach-json" id="coachJson" hidden>{
+  "word": "abundant",
+  "phoneticUk": "/əˈbʌndənt/",
+  "meaning": "豐富的"
+}</pre>
+            <div class="coach-actions">
+              <div class="coach-dots" id="coachDots" aria-hidden="true"><span class="is-current"></span><span></span><span></span><span></span><span></span></div>
+              <button class="coach-next" id="coachNext" type="button" hidden>下一步</button>
+            </div>
           </div>
         </div>
       </div>
@@ -677,17 +851,18 @@
     </section>
 
     <nav class="func-bar" id="funcBar" aria-label="功能列">
-      <button class="func-btn" id="importBtn" type="button">匯入</button>
-      <button class="func-btn" id="exportBtn" type="button">匯出</button>
-      <input id="importFile" type="file" accept=".txt,text/plain" hidden>
+      <button class="func-btn is-locked" id="importBtn" type="button" disabled title="先完成上方的引導">匯入</button>
+      <button class="func-btn is-locked" id="exportBtn" type="button" disabled title="先完成上方的引導">匯出</button>
+      <input id="importFile" type="file" accept=".txt,.json,text/plain,application/json" hidden>
       <p class="func-status" id="funcStatus" aria-live="polite"></p>
     </nav>
   </main>
 
   <script src="https://accounts.google.com/gsi/client"></script>
   <script src="src/vocab-import.js"></script>
+  <script src="src/vocab-export.js"></script>
   <script>
-    // 內建的單字卡。匯入的 txt 會加在後面，不會蓋掉這組。
+    // 內建的單字卡。匯入的 txt 或 json 會加在後面，不會蓋掉這組。
     const BASE_WORDS = [
       {
         word: "abundant",
@@ -777,9 +952,31 @@
         tone: "tap",
         direction: 0,
         nudge: "點",
-        kicker: "最後一步",
+        kicker: "再一步",
         title: "看意思",
         text: "點一下卡片，中文和例句會出現。"
+      },
+      {
+        kind: "info",
+        tone: "info",
+        direction: null,
+        target: "import",
+        sample: true,
+        kicker: "自己的單字",
+        title: "匯入",
+        text: "txt 或 json 都可以。txt 每一行照這個順序。",
+        nextLabel: "下一步"
+      },
+      {
+        kind: "info",
+        tone: "info",
+        direction: null,
+        target: "export",
+        preview: "json",
+        kicker: "最後一步",
+        title: "匯出",
+        text: "把目前的單字存成一個 json 檔，之後可以再匯入。",
+        nextLabel: "知道了"
       }
     ];
     const card = document.getElementById("card");
@@ -791,6 +988,12 @@
     const coachTitle = document.getElementById("coachTitle");
     const coachText = document.getElementById("coachText");
     const coachDots = Array.from(document.querySelectorAll("#coachDots span"));
+    const coachSample = document.getElementById("coachSample");
+    const coachPills = document.getElementById("coachPills");
+    const coachRecipe = document.getElementById("coachRecipe");
+    const coachCaption = document.getElementById("coachCaption");
+    const coachJson = document.getElementById("coachJson");
+    const coachNext = document.getElementById("coachNext");
     const markWrong = document.getElementById("markWrong");
     const markCorrect = document.getElementById("markCorrect");
     const done = document.getElementById("done");
@@ -810,6 +1013,13 @@
     const stampLearn = document.getElementById("stampLearn");
     const stampReview = document.getElementById("stampReview");
 
+    let vocabSession = null;
+    let vocabExport = null;
+
+    function releaseGuides() {
+      if (vocabSession) vocabSession.releaseGuide();
+      if (vocabExport) vocabExport.releaseGuide();
+    }
     let queue = [];
     let learned = [];
     let reviewMarks = 0;
@@ -883,6 +1093,27 @@
       render();
     }
 
+    function setGuideFocus(target) {
+      const importButton = document.getElementById("importBtn");
+      const exportButton = document.getElementById("exportBtn");
+      if (importButton) importButton.classList.toggle("is-guide", target === "import");
+      if (exportButton) exportButton.classList.toggle("is-guide", target === "export");
+      const button = target === "import" ? importButton : target === "export" ? exportButton : null;
+      if (button) button.scrollIntoView({ block: "nearest" });
+    }
+
+    function setCoachExtras(step) {
+      const info = Boolean(step && step.kind === "info");
+      coachNudge.hidden = !step || !step.nudge;
+      coachPills.hidden = !step || !step.sample;
+      coachRecipe.hidden = !step || !step.sample;
+      coachSample.hidden = !step || !step.sample;
+      coachCaption.hidden = !step || !step.sample;
+      coachJson.hidden = !step || step.preview !== "json";
+      coachNext.hidden = !info;
+      if (info) coachNext.textContent = step.nextLabel || "下一步";
+    }
+
     function paintCoach() {
       const step = COACH_STEPS[coachStep];
       const active = Boolean(step);
@@ -890,16 +1121,23 @@
       deck.classList.toggle("is-coaching", active);
       if (!active) {
         deck.removeAttribute("data-coach");
+        coach.classList.remove("is-info", "is-wrong");
+        setCoachExtras(null);
+        setGuideFocus("");
+        if (vocabSession) releaseGuides();
         return;
       }
       deck.dataset.coach = step.tone;
+      coach.classList.toggle("is-info", step.kind === "info");
       coach.classList.remove("is-wrong");
-      coachNudge.textContent = step.nudge;
+      coachNudge.textContent = step.nudge || "";
       coachNudge.className = `coach-nudge ${step.tone}`;
       coachPanel.className = `coach-panel ${step.tone}`;
       coachKicker.textContent = step.kicker;
       coachTitle.textContent = step.title;
       coachText.textContent = step.text;
+      setCoachExtras(step);
+      setGuideFocus(step.target || "");
       coachDots.forEach((dot, index) => {
         dot.classList.toggle("is-current", index === coachStep);
       });
@@ -951,12 +1189,16 @@
       if (!queue.length) {
         coachStep = -1;
         coach.hidden = true;
+        coach.classList.remove("is-info");
+        setCoachExtras(null);
+        setGuideFocus("");
         deck.classList.remove("is-coaching");
         deck.hidden = true;
         done.hidden = false;
         doneText.textContent = reviewMarks
           ? `學會 ${total} 張。途中有 ${reviewMarks} 次左滑，那些單字後來也都學會了。`
           : `學會 ${total} 張。這輪沒有需要再複習的單字。`;
+        if (vocabSession) releaseGuides();
         return;
       }
 
@@ -1127,7 +1369,10 @@
       const horizontal = Math.abs(dx) > threshold && Math.abs(dx) > Math.abs(dy);
       if (coachStep >= 0) {
         const step = COACH_STEPS[coachStep];
-        if (step.direction === 0) {
+        if (step.kind === "info") {
+          if (dragging) snapBack();
+          else card.classList.remove("is-dragging");
+        } else if (step.direction === 0) {
           if (dragging) snapBack();
           else {
             card.classList.remove("is-dragging");
@@ -1171,8 +1416,23 @@
 
     document.getElementById("again").addEventListener("click", resetDeck);
 
+    coachNext.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const step = coachStep >= 0 ? COACH_STEPS[coachStep] : null;
+      if (!step || step.kind !== "info" || busy) return;
+      advanceCoach();
+    });
+
     window.addEventListener("keydown", (event) => {
+      if (event.target.closest && event.target.closest("#coachNext")) return;
       const coaching = coachStep >= 0 ? COACH_STEPS[coachStep] : null;
+      if (coaching && coaching.kind === "info") {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          if (!busy) advanceCoach();
+        }
+        return;
+      }
       if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
         event.preventDefault();
         const direction = event.key === "ArrowRight" ? 1 : -1;
@@ -1224,8 +1484,11 @@
       render();
     }
 
-    let deckWords = VocabImport.start({
+    vocabSession = VocabImport.start({
       baseWords: BASE_WORDS,
+      onBusy(busy) {
+        if (vocabExport) vocabExport.setBusy(busy);
+      },
       onChange(event) {
         const added = event.added || [];
         if (added.length) {
@@ -1238,7 +1501,12 @@
         syncQueuesFromDeck();
         render();
       }
-    }).words;
+    });
+    let deckWords = vocabSession.words;
+    vocabExport = VocabExport.start({
+      getWords() { return deckWords; },
+      getFileName() { return VocabImport.exportFileName(); }
+    });
 
     queue = freshQueue();
     render();
