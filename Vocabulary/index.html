@@ -327,6 +327,25 @@
 
     .deck.is-coaching .tap-hint { visibility: hidden; }
 
+    .deck.is-reveal .card-body {
+      justify-content: flex-start;
+      overflow: auto;
+      padding-bottom: 118px;
+      scrollbar-width: none;
+    }
+
+    .deck.is-reveal .card-body::-webkit-scrollbar { display: none; }
+
+    .coach.is-reveal .coach-head,
+    .coach.is-reveal .coach-text,
+    .coach.is-reveal .coach-dots {
+      max-width: none;
+    }
+
+    .coach.is-reveal .coach-panel {
+      background: rgba(255, 253, 249, 0.97);
+    }
+
     .card.is-dragging { animation: none; }
 
     .coach {
@@ -860,7 +879,7 @@
   "meaning": "豐富的"
 }</pre>
             <div class="coach-actions">
-              <div class="coach-dots" id="coachDots" aria-hidden="true"><span class="is-current"></span><span></span><span></span><span></span><span></span></div>
+              <div class="coach-dots" id="coachDots" aria-hidden="true"><span class="is-current"></span><span></span><span></span><span></span><span></span><span></span></div>
               <button class="coach-next" id="coachNext" type="button" hidden>下一步</button>
             </div>
           </div>
@@ -991,6 +1010,15 @@
         kicker: "再一步",
         title: "看意思",
         text: "點一下卡片，中文和例句會出現。"
+      },
+      {
+        kind: "reveal",
+        tone: "tap",
+        direction: null,
+        kicker: "就是這樣",
+        title: "例句",
+        text: "中文和例句出現了。",
+        nextLabel: "下一步"
       },
       {
         kind: "info",
@@ -1197,15 +1225,15 @@
     }
 
     function setCoachExtras(step) {
-      const info = Boolean(step && step.kind === "info");
+      const showNext = Boolean(step && (step.kind === "info" || step.kind === "reveal"));
       coachNudge.hidden = !step || !step.nudge;
       coachPills.hidden = !step || !step.sample;
       coachRecipe.hidden = !step || !step.sample;
       coachSample.hidden = !step || !step.sample;
       coachCaption.hidden = !step || !step.sample;
       coachJson.hidden = !step || step.preview !== "json";
-      coachNext.hidden = !info;
-      if (info) coachNext.textContent = step.nextLabel || "下一步";
+      coachNext.hidden = !showNext;
+      if (showNext) coachNext.textContent = step.nextLabel || "下一步";
     }
 
     function paintCoach() {
@@ -1215,7 +1243,8 @@
       deck.classList.toggle("is-coaching", active);
       if (!active) {
         deck.removeAttribute("data-coach");
-        coach.classList.remove("is-info", "is-wrong");
+        coach.classList.remove("is-info", "is-reveal", "is-wrong");
+        deck.classList.remove("is-reveal");
         setCoachExtras(null);
         setGuideFocus("");
         if (vocabSession) releaseGuides();
@@ -1223,6 +1252,8 @@
       }
       deck.dataset.coach = step.tone;
       coach.classList.toggle("is-info", step.kind === "info");
+      coach.classList.toggle("is-reveal", step.kind === "reveal");
+      deck.classList.toggle("is-reveal", step.kind === "reveal");
       coach.classList.remove("is-wrong");
       coachNudge.textContent = step.nudge || "";
       coachNudge.className = `coach-nudge ${step.tone}`;
@@ -1283,10 +1314,10 @@
       if (!queue.length) {
         coachStep = -1;
         coach.hidden = true;
-        coach.classList.remove("is-info");
+        coach.classList.remove("is-info", "is-reveal");
         setCoachExtras(null);
         setGuideFocus("");
-        deck.classList.remove("is-coaching");
+        deck.classList.remove("is-coaching", "is-reveal");
         deck.hidden = true;
         done.hidden = false;
         doneText.textContent = reviewMarks
@@ -1463,7 +1494,7 @@
       const horizontal = Math.abs(dx) > threshold && Math.abs(dx) > Math.abs(dy);
       if (coachStep >= 0) {
         const step = COACH_STEPS[coachStep];
-        if (step.kind === "info") {
+        if (step.kind === "info" || step.kind === "reveal") {
           if (dragging) snapBack();
           else card.classList.remove("is-dragging");
         } else if (step.direction === 0) {
@@ -1513,7 +1544,7 @@
     coachNext.addEventListener("click", (event) => {
       event.stopPropagation();
       const step = coachStep >= 0 ? COACH_STEPS[coachStep] : null;
-      if (!step || step.kind !== "info" || busy) return;
+      if (!step || (step.kind !== "info" && step.kind !== "reveal") || busy) return;
       advanceCoach();
     });
 
@@ -1522,7 +1553,7 @@
     window.addEventListener("keydown", (event) => {
       if (event.target.closest && event.target.closest("#coachNext")) return;
       const coaching = coachStep >= 0 ? COACH_STEPS[coachStep] : null;
-      if (coaching && coaching.kind === "info") {
+      if (coaching && (coaching.kind === "info" || coaching.kind === "reveal")) {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           if (!busy) advanceCoach();
