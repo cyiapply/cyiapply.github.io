@@ -46,6 +46,7 @@
     button, p { font: inherit; }
 
     .app {
+      position: relative;
       width: min(100%, 440px);
       min-height: 100dvh;
       margin: 0 auto;
@@ -687,6 +688,29 @@
       line-height: 1.45;
     }
 
+    .guide-arrow {
+      position: absolute;
+      z-index: 8;
+      overflow: visible;
+      pointer-events: none;
+      filter: url("#guideSketch");
+    }
+
+    .guide-arrow path {
+      fill: none;
+      stroke: #c2410c;
+      stroke-width: 4;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .guide-defs {
+      position: absolute;
+      width: 0;
+      height: 0;
+      overflow: hidden;
+    }
+
     .func-status:empty { display: none; }
 
     .func-status a {
@@ -856,6 +880,18 @@
       <input id="importFile" type="file" accept=".txt,.json,text/plain,application/json" hidden>
       <p class="func-status" id="funcStatus" aria-live="polite"></p>
     </nav>
+    <svg class="guide-defs" width="0" height="0" aria-hidden="true">
+      <defs>
+        <filter id="guideSketch" x="-30%" y="-30%" width="160%" height="160%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="1" seed="4" result="noise"></feTurbulence>
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.6"></feDisplacementMap>
+        </filter>
+      </defs>
+    </svg>
+    <svg class="guide-arrow" id="guideArrow" hidden aria-hidden="true">
+      <path id="guideArrowShaft"></path>
+      <path id="guideArrowHead"></path>
+    </svg>
   </main>
 
   <script src="https://accounts.google.com/gsi/client"></script>
@@ -1093,13 +1129,71 @@
       render();
     }
 
+    let guideTarget = "";
+
+    function placeGuideArrow() {
+      const arrow = document.getElementById("guideArrow");
+      const shaft = document.getElementById("guideArrowShaft");
+      const head = document.getElementById("guideArrowHead");
+      if (!guideTarget) {
+        arrow.setAttribute("hidden", "");
+        return;
+      }
+      const button = document.getElementById(guideTarget === "import" ? "importBtn" : "exportBtn");
+      const app = document.querySelector(".app");
+      if (!button || !app || coach.hidden) {
+        arrow.setAttribute("hidden", "");
+        return;
+      }
+      const appBox = app.getBoundingClientRect();
+      const panelBox = coachPanel.getBoundingClientRect();
+      const buttonBox = button.getBoundingClientRect();
+      const fromLeft = guideTarget === "import";
+      const startX = (fromLeft ? panelBox.left + panelBox.width * 0.24 : panelBox.right - panelBox.width * 0.24) - appBox.left;
+      const startY = panelBox.bottom - appBox.top - 1;
+      const tipX = buttonBox.left + buttonBox.width / 2 - appBox.left;
+      const tipY = buttonBox.top - appBox.top + 3;
+      const pad = 34;
+      const minX = Math.min(startX, tipX) - pad;
+      const minY = Math.min(startY, tipY) - 16;
+      const width = Math.max(56, Math.abs(tipX - startX) + pad * 2);
+      const height = Math.max(42, Math.abs(tipY - startY) + 28);
+      arrow.style.left = `${minX}px`;
+      arrow.style.top = `${minY}px`;
+      arrow.style.width = `${width}px`;
+      arrow.style.height = `${height}px`;
+      arrow.setAttribute("viewBox", `0 0 ${width} ${height}`);
+      const x1 = startX - minX;
+      const y1 = startY - minY;
+      const x2 = tipX - minX;
+      const y2 = tipY - minY;
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const bend = fromLeft ? -28 : 28;
+      const c1x = x1 + dx * 0.15 + bend;
+      const c1y = y1 + Math.max(12, dy * 0.42);
+      const c2x = x2 + bend * 0.2;
+      const c2y = y2 - Math.max(14, dy * 0.48);
+      shaft.setAttribute("d", `M ${x1.toFixed(1)} ${y1.toFixed(1)} C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}`);
+      const angle = Math.atan2(y2 - c2y, x2 - c2x);
+      const spread = 0.7;
+      const hx1 = x2 - 17 * Math.cos(angle - spread);
+      const hy1 = y2 - 17 * Math.sin(angle - spread);
+      const hx2 = x2 - 13 * Math.cos(angle + spread);
+      const hy2 = y2 - 13 * Math.sin(angle + spread);
+      head.setAttribute("d", `M ${hx1.toFixed(1)} ${hy1.toFixed(1)} L ${x2.toFixed(1)} ${y2.toFixed(1)} L ${hx2.toFixed(1)} ${hy2.toFixed(1)}`);
+      arrow.removeAttribute("hidden");
+    }
+
     function setGuideFocus(target) {
       const importButton = document.getElementById("importBtn");
       const exportButton = document.getElementById("exportBtn");
       if (importButton) importButton.classList.toggle("is-guide", target === "import");
       if (exportButton) exportButton.classList.toggle("is-guide", target === "export");
+      guideTarget = target || "";
       const button = target === "import" ? importButton : target === "export" ? exportButton : null;
       if (button) button.scrollIntoView({ block: "nearest" });
+      requestAnimationFrame(() => placeGuideArrow());
     }
 
     function setCoachExtras(step) {
@@ -1422,6 +1516,8 @@
       if (!step || step.kind !== "info" || busy) return;
       advanceCoach();
     });
+
+    window.addEventListener("resize", () => placeGuideArrow());
 
     window.addEventListener("keydown", (event) => {
       if (event.target.closest && event.target.closest("#coachNext")) return;
