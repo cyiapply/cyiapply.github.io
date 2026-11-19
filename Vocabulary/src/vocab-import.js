@@ -67,6 +67,62 @@ function parseVocabText(text) {
   return { records, skipped };
 }
 
+function recordFromFields(source) {
+  if (typeof source === "string") {
+    const word = source.trim();
+    if (!word || !/[A-Za-z]/.test(word)) return null;
+    return {
+      word,
+      phoneticUk: "",
+      phoneticUs: "",
+      meaning: "",
+      example: "",
+      exampleZh: ""
+    };
+  }
+  if (!source || typeof source !== "object") return null;
+  const word = String(source.word || source.單字 || "").trim();
+  if (!word || !/[A-Za-z]/.test(word)) return null;
+  const phoneticUk = wrapPhonetic(source.phoneticUk || source.phonetic || source.ipa || source.音標 || source.英式音標 || "");
+  const phoneticUs = wrapPhonetic(source.phoneticUs || source.美式音標 || source.phoneticUk || source.phonetic || source.ipa || source.音標 || "");
+  return {
+    word,
+    phoneticUk,
+    phoneticUs: phoneticUs || phoneticUk,
+    meaning: String(source.meaning || source.中文 || source.中文說明 || source.翻譯 || source.translation || "").trim(),
+    example: String(source.example || source.例句 || "").trim(),
+    exampleZh: String(source.exampleZh || source.例句翻譯 || "").trim()
+  };
+}
+
+function parseVocabJson(text) {
+  let data;
+  try {
+    data = JSON.parse(String(text || "").replace(/^\uFEFF/, ""));
+  } catch (error) {
+    return { error: "這個 json 無法讀取。", records: [], skipped: [] };
+  }
+  let list = data;
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    if (data.word || data.單字) list = [data];
+    else list = data.words || data.records || data.items || data.vocabulary || null;
+  }
+  if (!Array.isArray(list)) {
+    return { error: "json 需要是單字陣列。", records: [], skipped: [] };
+  }
+  const records = [];
+  const skipped = [];
+  list.forEach((item, index) => {
+    const record = recordFromFields(item);
+    if (!record) {
+      skipped.push(index + 1);
+      return;
+    }
+    records.push(record);
+  });
+  return { records, skipped };
+}
+
 const entryCache = new Map();
 
 function cleanIpa(text) {
@@ -397,60 +453,79 @@ async function completeRecord(record) {
   return result;
 }
 
-function downloadText(filename, text, mime) {
-  const blob = new Blob([text], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1500);
-}
-
-function wordsToTxt(words) {
-  return `${words.map((item) => {
-    const uk = item.phoneticUk || "";
-    const us = item.phoneticUs || "";
-    const parts = [item.word];
-    if (uk && us && uk !== us) parts.push(uk, us);
-    else if (uk || us) parts.push(uk || us);
-    if (item.meaning) parts.push(item.meaning);
-    return parts.join(" ");
-  }).join("\n")}\n`;
-}
-
 function wordKey(word) {
   return String(word || "").trim().toLowerCase();
 }
 
 
-const STORAGE_KEY = "owen-vocab-import";
-const SHEET_ID_KEY = "owen-vocab-sheet-id";
+const WORD_STORAGE_PREFIX = "owen-vocab-import";
+const SHEET_MAP_KEY = "owen-vocab-sheet-ids";
+const LEGACY_WORD_KEY = "owen-vocab-import";
+const LEGACY_SHEET_ID_KEY = "owen-vocab-sheet-id";
 const GOOGLE_CLIENT_ID = "50764895625-tia82ub3ggkufij8cs7pbmlti51b3uav.apps.googleusercontent.com";
-const SHEET_SCOPE = "https://www.googleapis.com/auth/drive.file";
+const SHEET_SCOPE = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email";
 const SHEET_HEADERS = ["單字", "英式音標", "美式音標", "中文", "例句", "例句翻譯", "更新時間"];
 
 let accessToken = "";
 let tokenExpiresAt = 0;
 let tokenClient = null;
 let tokenWait = null;
+let accountEmail = "";
 
 function googleReady() {
   return Boolean(window.google && google.accounts && google.accounts.oauth2);
 }
 
-function readSheetId() {
+function sheetTitle(email) {
+  return `單字卡 ${email}`;
+}
+
+function exportFileName() {
+  return `${accountEmail ? sheetTitle(accountEmail) : "單字卡"}.json`;
+}
+
+function readJson(key, fallback) {
   try {
-    return String(localStorage.getItem(SHEET_ID_KEY) || "").trim();
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    const saved = JSON.parse(raw);
+    return saved == null ? fallback : saved;
+  } catch (error) {
+    return fallback;
+  }
+}
+
+function readSheetMap() {
+  const saved = readJson(SHEET_MAP_KEY, {});
+  return saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+}
+
+function readSheetId(email) {
+  if (!email) return "";
+  return String(readSheetMap()[email] || "").trim();
+}
+
+function writeSheetId(email, id) {
+  const map = readSheetMap();
+  map[email] = id;
+  localStorage.setItem(SHEET_MAP_KEY, JSON.stringify(map));
+}
+
+function readLegacySheetId() {
+  try {
+    return String(localStorage.getItem(LEGACY_SHEET_ID_KEY) || "").trim();
   } catch (error) {
     return "";
   }
 }
 
-function writeSheetId(id) {
-  localStorage.setItem(SHEET_ID_KEY, id);
+function wordStorageKey(email) {
+  return `${WORD_STORAGE_PREFIX}:${email}`;
+}
+
+function readWordList(key) {
+  const saved = readJson(key, []);
+  return Array.isArray(saved) ? saved.filter((item) => item && item.word) : [];
 }
 
 function sheetRecord(item) {
@@ -527,13 +602,27 @@ function sheetFailure(error) {
   if (code === "missing-client" || code === "google-script") {
     return "單字已補全。這個頁面還沒有 Google 登入設定，所以還沒寫進試算表。";
   }
+  if (code === "missing-account") {
+    return "沒有讀到 Google 帳號，所以還沒寫進試算表。";
+  }
+  if (code === "sheet-denied") {
+    return "無法開啟這個帳號的單字卡，所以這次沒寫進試算表。";
+  }
   if (/access_denied|popup_closed|popup_failed|interaction_required/.test(code)) {
     return "沒有完成 Google 登入，這次先存在這個瀏覽器。";
   }
   return "寫入 Google 試算表失敗，這次先存在這個瀏覽器。";
 }
 
+let tokenQueue = Promise.resolve();
+
 function requestToken(prompt) {
+  const run = tokenQueue.then(() => requestTokenNow(prompt), () => requestTokenNow(prompt));
+  tokenQueue = run.then(() => {}, () => {});
+  return run;
+}
+
+function requestTokenNow(prompt) {
   if (accessToken && Date.now() < tokenExpiresAt) return Promise.resolve(accessToken);
   if (!GOOGLE_CLIENT_ID) return Promise.reject(new Error("missing-client"));
   if (!googleReady()) return Promise.reject(new Error("google-script"));
@@ -585,25 +674,130 @@ async function sheetApi(path, options) {
   return data || {};
 }
 
-async function ensureSpreadsheet() {
-  const saved = readSheetId();
+function driveQueryLiteral(value) {
+  return `'${String(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+}
+
+async function driveApi(path, options) {
+  const settings = options || {};
+  const response = await fetch(`https://www.googleapis.com/drive/v3${path}`, {
+    method: settings.method || "GET",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: settings.body
+  });
+  const text = await response.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (error) { data = null; }
+  if (!response.ok) {
+    const message = data && data.error && data.error.message ? data.error.message : (text || `Google 雲端硬碟回應 ${response.status}`);
+    const failure = new Error(message);
+    failure.status = response.status;
+    throw failure;
+  }
+  return data || {};
+}
+
+async function fetchAccountEmail() {
+  const response = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  const text = await response.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (error) { data = null; }
+  if (!response.ok || !data || !data.email) throw new Error("missing-account");
+  return String(data.email).trim().toLowerCase();
+}
+
+async function ensureAccount() {
+  if (!(accessToken && Date.now() < tokenExpiresAt)) await requestToken("");
+  if (!accountEmail) accountEmail = await fetchAccountEmail();
+  return accountEmail;
+}
+
+async function canOpenSpreadsheet(id) {
+  try {
+    await sheetApi(`/spreadsheets/${encodeURIComponent(id)}?fields=spreadsheetId`);
+    return "ok";
+  } catch (error) {
+    if (error.status === 404) return "missing";
+    if (error.status === 403) return "denied";
+    throw error;
+  }
+}
+
+async function renameSpreadsheet(spreadsheetId, title) {
+  const meta = await sheetApi(`/spreadsheets/${encodeURIComponent(spreadsheetId)}?fields=properties.title`);
+  if (meta.properties && meta.properties.title === title) return;
+  await sheetApi(`/spreadsheets/${encodeURIComponent(spreadsheetId)}:batchUpdate`, {
+    method: "POST",
+    body: JSON.stringify({
+      requests: [{
+        updateSpreadsheetProperties: {
+          properties: { title },
+          fields: "title"
+        }
+      }]
+    })
+  });
+}
+
+async function findSheetByTitle(title) {
+  const query = [
+    `name = ${driveQueryLiteral(title)}`,
+    "mimeType = 'application/vnd.google-apps.spreadsheet'",
+    "trashed = false"
+  ].join(" and ");
+  const data = await driveApi(`/files?q=${encodeURIComponent(query)}&fields=files(id,name)&pageSize=10&spaces=drive`);
+  const match = (data.files || []).find((file) => file && file.id && file.name === title);
+  return match ? match.id : "";
+}
+
+async function ensureSpreadsheet(create) {
+  const email = await ensureAccount();
+  const title = sheetTitle(email);
+  const saved = readSheetId(email);
   if (saved) {
-    try {
-      await sheetApi(`/spreadsheets/${encodeURIComponent(saved)}?fields=spreadsheetId`);
-      return saved;
-    } catch (error) {
-      if (error.status !== 404) throw error;
+    const state = await canOpenSpreadsheet(saved);
+    if (state === "ok") {
+      await renameSpreadsheet(saved, title);
+      return { id: saved, title, adoptedLegacy: false };
+    }
+    if (state === "denied") throw new Error("sheet-denied");
+  }
+  let driveError = null;
+  try {
+    const found = await findSheetByTitle(title);
+    if (found) {
+      writeSheetId(email, found);
+      return { id: found, title, adoptedLegacy: false };
+    }
+  } catch (error) {
+    driveError = error;
+  }
+  const legacy = readLegacySheetId();
+  if (legacy && legacy !== saved) {
+    const state = await canOpenSpreadsheet(legacy);
+    if (state === "ok") {
+      await renameSpreadsheet(legacy, title);
+      writeSheetId(email, legacy);
+      try { localStorage.removeItem(LEGACY_SHEET_ID_KEY); } catch (error) { /* 帳號對應的 id 已經記下。 */ }
+      return { id: legacy, title, adoptedLegacy: true };
     }
   }
+  if (driveError && !create) throw driveError;
+  if (!create) return { id: "", title, adoptedLegacy: false };
   const created = await sheetApi("/spreadsheets", {
     method: "POST",
     body: JSON.stringify({
-      properties: { title: "單字卡" },
+      properties: { title },
       sheets: [{ properties: { title: "單字" } }]
     })
   });
-  writeSheetId(created.spreadsheetId);
-  return created.spreadsheetId;
+  writeSheetId(email, created.spreadsheetId);
+  return { id: created.spreadsheetId, title, adoptedLegacy: false };
 }
 
 async function readSheetRows(spreadsheetId) {
@@ -626,36 +820,36 @@ async function ensureVocabSheet(spreadsheetId) {
 
 async function saveRecordsToSheet(records) {
   if (!records || !records.length) return null;
-  if (!(accessToken && Date.now() < tokenExpiresAt)) await requestToken("");
-  const spreadsheetId = await ensureSpreadsheet();
-  const rows = await ensureVocabSheet(spreadsheetId);
+  const sheet = await ensureSpreadsheet(true);
+  const rows = await ensureVocabSheet(sheet.id);
   const merged = mergeSheetRows(rows, records, sheetStamp());
   const range = `單字!A1:G${merged.length}`;
-  await sheetApi(`/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent("單字!A:G")}:clear`, {
+  await sheetApi(`/spreadsheets/${encodeURIComponent(sheet.id)}/values/${encodeURIComponent("單字!A:G")}:clear`, {
     method: "POST",
     body: "{}"
   });
-  await sheetApi(`/spreadsheets/${encodeURIComponent(spreadsheetId)}/values/${encodeURIComponent(range)}?valueInputOption=RAW`, {
+  await sheetApi(`/spreadsheets/${encodeURIComponent(sheet.id)}/values/${encodeURIComponent(range)}?valueInputOption=RAW`, {
     method: "PUT",
     body: JSON.stringify({ range, majorDimension: "ROWS", values: merged })
   });
   return {
     count: records.length,
-    url: `https://docs.google.com/spreadsheets/d/${spreadsheetId}`
+    url: `https://docs.google.com/spreadsheets/d/${sheet.id}`,
+    title: sheet.title
   };
 }
 
-function readImportedWords() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-    return Array.isArray(saved) ? saved.filter((item) => item && item.word) : [];
-  } catch (error) {
-    return [];
-  }
+function readImportedWords(email) {
+  if (!email) return [];
+  return readWordList(wordStorageKey(email));
 }
 
-function saveImportedWords(importedWords) {
-  localStorage.setItem(STORAGE_KEY, `${JSON.stringify(importedWords, null, 2)}\n`);
+function readLegacyWords() {
+  return readWordList(LEGACY_WORD_KEY);
+}
+
+function saveImportedWords(email, importedWords) {
+  localStorage.setItem(wordStorageKey(email), `${JSON.stringify(importedWords, null, 2)}\n`);
 }
 
 function mergeRecords(deckWords, records) {
@@ -692,14 +886,15 @@ function start(options) {
   const settings = options || {};
   const baseWords = Array.isArray(settings.baseWords) ? settings.baseWords : [];
   const deckWords = baseWords.map((item) => ({ ...item }));
-  let importedWords = mergeRecords(deckWords, readImportedWords());
+  let importedWords = [];
   let enrichToken = 0;
   const notify = typeof settings.onChange === "function" ? settings.onChange : function () {};
+  const onBusy = typeof settings.onBusy === "function" ? settings.onBusy : function () {};
   const importButton = document.getElementById("importBtn");
-  const exportButton = document.getElementById("exportBtn");
   const fileInput = document.getElementById("importFile");
   const status = document.getElementById("funcStatus");
   let sheetLink = "";
+  let guideReady = false;
 
   function setStatus(text) {
     if (!status) return;
@@ -714,58 +909,146 @@ function start(options) {
     status.append(link);
   }
 
+  function setGuideLock(locked) {
+    if (!importButton) return;
+    importButton.disabled = locked;
+    importButton.classList.toggle("is-locked", locked);
+    if (locked) importButton.title = "先完成上方的引導";
+    else importButton.removeAttribute("title");
+  }
+
   function setBusy(busy) {
-    if (importButton) importButton.disabled = busy;
-    if (exportButton) exportButton.disabled = busy;
+    if (importButton) {
+      importButton.disabled = busy || !guideReady;
+      importButton.classList.toggle("is-busy", busy);
+    }
+    onBusy(busy);
   }
 
   function rememberImported() {
     const baseKeys = new Set(baseWords.map((item) => wordKey(item.word)));
     importedWords = deckWords.filter((item) => !baseKeys.has(wordKey(item.word)));
-    saveImportedWords(importedWords);
+    if (!accountEmail) return false;
+    saveImportedWords(accountEmail, importedWords);
+    return true;
+  }
+
+  async function loadAccountDeck() {
+    const email = await ensureAccount();
+    const title = sheetTitle(email);
+    const incoming = readImportedWords(email);
+    let adoptedLegacyWords = false;
+    const sheet = await ensureSpreadsheet(false);
+    if (!incoming.length && (sheet.adoptedLegacy || !readLegacySheetId())) {
+      const legacyWords = readLegacyWords();
+      if (legacyWords.length) {
+        incoming.push(...legacyWords);
+        adoptedLegacyWords = true;
+      }
+    }
+    const added = mergeRecords(deckWords, incoming);
+    let remoteCount = 0;
+    if (sheet.id) {
+      const records = rowsToRecords(await readSheetRows(sheet.id));
+      remoteCount = records.length;
+      added.push(...mergeRecords(deckWords, records));
+      sheetLink = `https://docs.google.com/spreadsheets/d/${sheet.id}`;
+    }
+    let stored = false;
+    try { stored = rememberImported(); } catch (error) { stored = false; }
+    if (adoptedLegacyWords && stored) {
+      try { localStorage.removeItem(LEGACY_WORD_KEY); } catch (error) { /* 帳號自己的單字已經記下。 */ }
+    }
+    return { added, remoteCount, title, sheetId: sheet.id, localCount: incoming.length };
+  }
+
+  let accountDeckPromise = null;
+
+  function loadAccountDeckOnce() {
+    if (!accountDeckPromise) {
+      accountDeckPromise = loadAccountDeck().then((result) => {
+        if (result.added.length) notify({ added: result.added, refresh: false });
+        else if (result.remoteCount || result.localCount) notify({ added: [], refresh: true });
+        if (result.remoteCount) setStatus(`已從「${result.title}」讀入 ${result.remoteCount} 筆。`);
+        else if (!result.sheetId && !result.localCount) setStatus(`這個帳號還沒有單字卡。匯入後會建立「${result.title}」。`);
+        return result;
+      }).catch((error) => {
+        accountDeckPromise = null;
+        throw error;
+      });
+    }
+    return accountDeckPromise;
   }
 
   async function loadSheet() {
-    const spreadsheetId = readSheetId();
-    if (!spreadsheetId || !(accessToken && Date.now() < tokenExpiresAt)) return 0;
-    const records = rowsToRecords(await readSheetRows(spreadsheetId));
+    if (!(accessToken && Date.now() < tokenExpiresAt)) return 0;
+    const sheet = await ensureSpreadsheet(false);
+    if (!sheet.id) return 0;
+    const records = rowsToRecords(await readSheetRows(sheet.id));
     const added = mergeRecords(deckWords, records);
     try { rememberImported(); } catch (error) { /* 試算表仍是主要儲存。 */ }
+    sheetLink = `https://docs.google.com/spreadsheets/d/${sheet.id}`;
     notify({ added, refresh: added.length === 0 });
     return records.length;
   }
 
   if (importButton && fileInput) {
     importButton.addEventListener("click", () => {
+      if (!guideReady) return;
       fileInput.value = "";
       const openFile = () => fileInput.click();
-      if (!GOOGLE_CLIENT_ID || !googleReady() || (accessToken && Date.now() < tokenExpiresAt)) {
+      const openAccount = () => {
+        loadAccountDeckOnce().catch(() => {});
+      };
+      if (!GOOGLE_CLIENT_ID || !googleReady()) {
         openFile();
         return;
       }
-      requestToken("").then(openFile).catch(openFile);
+      if (accessToken && Date.now() < tokenExpiresAt) {
+        openAccount();
+        openFile();
+        return;
+      }
+      requestToken("").then(() => {
+        openAccount();
+        openFile();
+      }).catch(openFile);
     });
 
     fileInput.addEventListener("change", async () => {
+      if (!guideReady) return;
       const file = fileInput.files && fileInput.files[0];
       if (!file) return;
-      if (!file.name.toLowerCase().endsWith(".txt")) {
-        setStatus("只接受 .txt 檔。每一行一個單字，格式是：單字 /音標/ 翻譯。");
+      const lowerName = file.name.toLowerCase();
+      const isTxt = lowerName.endsWith(".txt");
+      const isJson = lowerName.endsWith(".json");
+      if (!isTxt && !isJson) {
+        setStatus("只接受 .txt 或 .json。txt 每一行是：單字 /音標/ 中文說明。");
         return;
       }
 
       setBusy(true);
       enrichToken += 1;
-      setStatus("正在讀取，並補上缺少的音標、翻譯和例句…");
+      setStatus("正在讀取這個帳號的單字卡…");
+      if (accessToken && Date.now() < tokenExpiresAt) {
+        try { await loadAccountDeckOnce(); } catch (error) { /* 讀不到時仍處理這次選的檔案。 */ }
+      }
+      setStatus("正在讀取，並補上缺少的音標、中文和例句…");
       try {
         const text = await file.text();
-        const parsed = parseVocabText(text);
+        const parsed = isJson ? parseVocabJson(text) : parseVocabText(text);
+        if (parsed.error) {
+          setStatus(parsed.error);
+          return;
+        }
         const records = parsed.records;
         const skipped = parsed.skipped;
         if (!records.length) {
           setStatus(skipped.length
-            ? "沒有讀到單字。請確認每一行是「單字 /音標/ 翻譯」，音標前後都要有 /。"
-            : "這個 txt 是空的。");
+            ? (isJson
+              ? "沒有讀到單字。json 裡每一筆都要有英文單字。"
+              : "沒有讀到單字。請確認每一行是「單字 /音標/ 中文說明」，音標前後都要有 /。")
+            : (isJson ? "這個 json 沒有單字。" : "這個 txt 是空的。"));
           return;
         }
 
@@ -798,15 +1081,12 @@ function start(options) {
         await Promise.all(Array.from({ length: Math.min(limit, records.length) }, () => run()));
 
         const added = mergeRecords(deckWords, records);
-        const json = `${JSON.stringify(records, null, 2)}\n`;
-        const jsonName = `${file.name.replace(/\.txt$/i, "") || "vocabulary"}.json`;
-        let stored = true;
+        let stored = false;
         try {
-          rememberImported();
+          stored = rememberImported();
         } catch (error) {
           stored = false;
         }
-        downloadText(jsonName, json, "application/json");
         notify({ added, refresh: added.length === 0 });
 
         const kept = records.length - added.length;
@@ -814,53 +1094,65 @@ function start(options) {
           ? [`已加入 ${added.length} 張，原本的 ${baseWords.length} 張都還在。現在共 ${deckWords.length} 張。`]
           : ["這些單字本來就在卡組裡，原本的卡片維持不變。"];
         if (kept) notes.push(`有 ${kept} 張跟現有單字重複，所以沒有再新增。`);
-        notes.push(`並下載 ${jsonName}。`);
         setStatus("正在把補完的單字存進 Google 試算表…");
         try {
           const saved = await saveRecordsToSheet(records);
           if (saved && saved.url) sheetLink = saved.url;
-          notes.push(`已把補完的 ${records.length} 筆存進 Google 試算表「單字卡」。`);
+          notes.push(`已把補完的 ${records.length} 筆存進「${saved.title}」。`);
           try { await loadSheet(); } catch (error) { /* 這次寫入的單字已經在卡組裡。 */ }
         } catch (error) {
           notes.push(sheetFailure(error));
         }
-        notes.push(stored ? "新加的單字也暫存在這個瀏覽器。" : "瀏覽器無法暫存，重新整理後要再匯入一次。");
+        try {
+          stored = rememberImported();
+        } catch (error) {
+          stored = false;
+        }
+        if (accountEmail) {
+          notes.push(stored ? "新加的單字也暫存在這個帳號。" : "瀏覽器無法暫存，重新整理後會再從這個帳號的單字卡讀取。");
+        } else {
+          notes.push("還沒登入 Google，重新整理後要再匯入一次。");
+        }
         if (totals.phoneticFilled || totals.meaningFilled || totals.exampleFilled) {
-          notes.push(`補上音標 ${totals.phoneticFilled} 筆、翻譯 ${totals.meaningFilled} 筆、例句 ${totals.exampleFilled} 筆。`);
+          notes.push(`補上音標 ${totals.phoneticFilled} 筆、中文 ${totals.meaningFilled} 筆、例句 ${totals.exampleFilled} 筆。`);
         }
         if (totals.phoneticMissed || totals.meaningMissed || totals.exampleMissed) {
-          notes.push(`還有音標 ${totals.phoneticMissed} 筆、翻譯 ${totals.meaningMissed} 筆、例句 ${totals.exampleMissed} 筆沒查到。`);
+          notes.push(`還有音標 ${totals.phoneticMissed} 筆、中文 ${totals.meaningMissed} 筆、例句 ${totals.exampleMissed} 筆沒查到。`);
         }
-        if (skipped.length) notes.push(`略過第 ${skipped.join("、")} 行。`);
+        if (skipped.length) {
+          notes.push(isJson
+            ? `略過第 ${skipped.join("、")} 筆。`
+            : `略過第 ${skipped.join("、")} 行。`);
+        }
         setStatus(notes.join(""));
       } catch (error) {
-        setStatus("匯入失敗，請再選一次 txt。");
+        setStatus("匯入失敗，請再選一次檔案。");
       } finally {
         setBusy(false);
       }
     });
   }
 
-  if (exportButton) {
-    exportButton.addEventListener("click", () => {
-      downloadText("單字卡.txt", wordsToTxt(deckWords), "text/plain;charset=utf-8");
-      setStatus(`已匯出 ${deckWords.length} 筆到 單字卡.txt。`);
-    });
+  setGuideLock(true);
+
+  function releaseGuide() {
+    if (guideReady) return;
+    guideReady = true;
+    setGuideLock(false);
+    setTimeout(async () => {
+      if (GOOGLE_CLIENT_ID && googleReady()) {
+        try {
+          await requestToken("none");
+          await loadAccountDeckOnce();
+        } catch (error) {
+          /* 沒有現成的 Google 登入時，先用內建單字。匯入時會再登入並讀取這個帳號的單字卡。 */
+        }
+      }
+      repairDeck();
+    }, 0);
   }
 
-  setTimeout(async () => {
-    if (GOOGLE_CLIENT_ID && googleReady() && readSheetId()) {
-      try {
-        await requestToken("none");
-        const count = await loadSheet();
-        if (count) setStatus(`已從 Google 試算表讀入 ${count} 筆。`);
-      } catch (error) {
-        /* 沒有現成的 Google 登入時，先用瀏覽器裡的單字。 */
-      }
-    }
-    repairDeck();
-  }, 0);
-  return { words: deckWords };
+  return { words: deckWords, releaseGuide };
 
   async function repairDeck() {
     const pending = deckWords.filter(isIncomplete);
@@ -892,12 +1184,12 @@ function start(options) {
     }
     const notes = [];
     if (totals.phoneticFilled) notes.push(`音標 ${totals.phoneticFilled} 筆`);
-    if (totals.meaningFilled) notes.push(`翻譯 ${totals.meaningFilled} 筆`);
+    if (totals.meaningFilled) notes.push(`中文 ${totals.meaningFilled} 筆`);
     if (totals.exampleFilled) notes.push(`例句 ${totals.exampleFilled} 筆`);
     setStatus(notes.length ? `已補上${notes.join("、")}。` : "");
     notify({ added: [], refresh: true });
   }
 }
 
-root.VocabImport = { start, wordKey };
+root.VocabImport = { start, wordKey, exportFileName };
 })(window);
