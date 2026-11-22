@@ -652,6 +652,18 @@
       gap: 8px;
     }
 
+    .import-file {
+      position: fixed;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      border: 0;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
     .func-btn {
       flex: 1 1 120px;
       min-height: 44px;
@@ -896,7 +908,7 @@
     <nav class="func-bar" id="funcBar" aria-label="功能列">
       <button class="func-btn is-locked" id="importBtn" type="button" disabled title="先完成上方的引導">匯入</button>
       <button class="func-btn is-locked" id="exportBtn" type="button" disabled title="先完成上方的引導">匯出</button>
-      <input id="importFile" type="file" accept=".txt,.json,text/plain,application/json" hidden>
+      <input id="importFile" class="import-file" type="file" accept=".txt,.json" tabindex="-1" aria-hidden="true">
       <p class="func-status" id="funcStatus" aria-live="polite"></p>
     </nav>
     <svg class="guide-defs" width="0" height="0" aria-hidden="true">

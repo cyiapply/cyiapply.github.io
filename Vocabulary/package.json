@@ -1,0 +1,7 @@
+{
+  "name": "vocabulary",
+  "private": true,
+  "scripts": {
+    "start": "node serve.js"
+  }
+}

@@ -243,7 +243,7 @@ function fallbackExample(word, definition) {
 
 async function fetchDictionary(word) {
   try {
-    const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+    const response = await fetchWithTimeout(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`, {}, 12000);
     if (!response.ok) return null;
     const data = await response.json();
     const entry = Array.isArray(data) ? data[0] : null;
@@ -306,8 +306,8 @@ async function fetchWiktionaryTitle(title) {
   try {
     const encoded = encodeURIComponent(title);
     const [textResponse, definitionResponse] = await Promise.all([
-      fetch(`https://en.wiktionary.org/w/api.php?action=parse&page=${encoded}&prop=wikitext&format=json&redirects=1&origin=*`),
-      fetch(`https://en.wiktionary.org/api/rest_v1/page/definition/${encoded}`)
+      fetchWithTimeout(`https://en.wiktionary.org/w/api.php?action=parse&page=${encoded}&prop=wikitext&format=json&redirects=1&origin=*`, {}, 12000),
+      fetchWithTimeout(`https://en.wiktionary.org/api/rest_v1/page/definition/${encoded}`, {}, 12000)
     ]);
     const found = emptyEntry();
     if (textResponse.ok) {
@@ -385,7 +385,7 @@ async function lookupEntry(word) {
 }
 
 async function lookupMeaning(word) {
-  const response = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=en|zh-TW`);
+  const response = await fetchWithTimeout(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=en|zh-TW`, {}, 12000);
   if (!response.ok) return "";
   const data = await response.json();
   if (data.responseStatus && data.responseStatus !== 200) return "";
@@ -608,17 +608,90 @@ function sheetFailure(error) {
   if (code === "sheet-denied") {
     return "無法開啟這個帳號的單字卡，所以這次沒寫進試算表。";
   }
-  if (/access_denied|popup_closed|popup_failed|interaction_required/.test(code)) {
+  if (/access_denied|popup_closed|popup_failed|interaction_required|token-timeout/.test(code)) {
     return "沒有完成 Google 登入，這次先存在這個瀏覽器。";
   }
   return "寫入 Google 試算表失敗，這次先存在這個瀏覽器。";
 }
 
-let tokenQueue = Promise.resolve();
+let tokenChain = Promise.resolve();
+let tokenGeneration = 0;
+
+function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs || 20000);
+  const settings = Object.assign({}, options, { signal: controller.signal });
+  return fetch(url, settings).finally(() => clearTimeout(timer));
+}
+
+function invalidateTokenClient() {
+  tokenClient = null;
+  tokenGeneration += 1;
+}
+
+function endTokenWait(wait) {
+  if (!wait || wait.done) return false;
+  wait.done = true;
+  clearTimeout(wait.timer);
+  if (tokenWait === wait) tokenWait = null;
+  return true;
+}
+
+function ensureTokenClient() {
+  if (tokenClient) return tokenClient;
+  const clientGeneration = ++tokenGeneration;
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: GOOGLE_CLIENT_ID,
+    scope: SHEET_SCOPE,
+    callback: (response) => {
+      if (clientGeneration !== tokenGeneration) return;
+      const wait = tokenWait;
+      if (!wait || !endTokenWait(wait)) {
+        if (!tokenWait && response && response.access_token) {
+          accessToken = response.access_token;
+          tokenExpiresAt = Date.now() + (Number(response.expires_in) || 3600) * 1000 - 60000;
+        }
+        return;
+      }
+      if (!response || response.error) {
+        accessToken = "";
+        tokenExpiresAt = 0;
+        wait.reject(new Error((response && response.error) || "access_denied"));
+        return;
+      }
+      accessToken = response.access_token;
+      tokenExpiresAt = Date.now() + (Number(response.expires_in) || 3600) * 1000 - 60000;
+      wait.resolve(accessToken);
+    },
+    error_callback: (error) => {
+      if (clientGeneration !== tokenGeneration) return;
+      const wait = tokenWait;
+      if (!wait || !endTokenWait(wait)) return;
+      const type = (error && (error.type || error.message)) || "popup_failed_to_open";
+      wait.reject(new Error(String(type)));
+    }
+  });
+  return tokenClient;
+}
+
+function cancelSilentToken() {
+  const wait = tokenWait;
+  if (!wait || wait.prompt !== "none") return;
+  invalidateTokenClient();
+  if (!endTokenWait(wait)) return;
+  wait.reject(new Error("interaction_required"));
+}
 
 function requestToken(prompt) {
-  const run = tokenQueue.then(() => requestTokenNow(prompt), () => requestTokenNow(prompt));
-  tokenQueue = run.then(() => {}, () => {});
+  if (prompt !== "none") cancelSilentToken();
+  // 佇列空著時要在這次點擊裡立刻開啟登入視窗。排進 microtask 會失去使用者操作，視窗會被瀏覽器擋住。
+  if (!tokenWait) {
+    const run = requestTokenNow(prompt);
+    tokenChain = run.then(() => {}, () => {});
+    return run;
+  }
+  const run = tokenChain.then(() => requestTokenNow(prompt), () => requestTokenNow(prompt));
+  tokenChain = run.then(() => {}, () => {});
   return run;
 }
 
@@ -627,41 +700,37 @@ function requestTokenNow(prompt) {
   if (!GOOGLE_CLIENT_ID) return Promise.reject(new Error("missing-client"));
   if (!googleReady()) return Promise.reject(new Error("google-script"));
   return new Promise((resolve, reject) => {
-    tokenWait = { resolve, reject };
-    if (!tokenClient) {
-      tokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
-        scope: SHEET_SCOPE,
-        callback: (response) => {
-          const wait = tokenWait;
-          tokenWait = null;
-          if (!wait) return;
-          if (!response || response.error) {
-            accessToken = "";
-            tokenExpiresAt = 0;
-            wait.reject(new Error((response && response.error) || "access_denied"));
-            return;
-          }
-          accessToken = response.access_token;
-          tokenExpiresAt = Date.now() + (Number(response.expires_in) || 3600) * 1000 - 60000;
-          wait.resolve(accessToken);
-        }
-      });
+    const wait = {
+      prompt: prompt || "",
+      done: false,
+      timer: null,
+      resolve,
+      reject
+    };
+    wait.timer = setTimeout(() => {
+      if (!endTokenWait(wait)) return;
+      invalidateTokenClient();
+      reject(new Error(prompt === "none" ? "interaction_required" : "token-timeout"));
+    }, prompt === "none" ? 4000 : 60000);
+    tokenWait = wait;
+    try {
+      ensureTokenClient().requestAccessToken(prompt ? { prompt } : {});
+    } catch (error) {
+      if (endTokenWait(wait)) reject(error);
     }
-    tokenClient.requestAccessToken({ prompt: prompt || "" });
   });
 }
 
 async function sheetApi(path, options) {
   const settings = options || {};
-  const response = await fetch(`https://sheets.googleapis.com/v4${path}`, {
+  const response = await fetchWithTimeout(`https://sheets.googleapis.com/v4${path}`, {
     method: settings.method || "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json"
     },
     body: settings.body
-  });
+  }, 20000);
   const text = await response.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch (error) { data = null; }
@@ -680,14 +749,14 @@ function driveQueryLiteral(value) {
 
 async function driveApi(path, options) {
   const settings = options || {};
-  const response = await fetch(`https://www.googleapis.com/drive/v3${path}`, {
+  const response = await fetchWithTimeout(`https://www.googleapis.com/drive/v3${path}`, {
     method: settings.method || "GET",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json"
     },
     body: settings.body
-  });
+  }, 20000);
   const text = await response.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch (error) { data = null; }
@@ -701,9 +770,9 @@ async function driveApi(path, options) {
 }
 
 async function fetchAccountEmail() {
-  const response = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+  const response = await fetchWithTimeout("https://www.googleapis.com/oauth2/v2/userinfo", {
     headers: { Authorization: `Bearer ${accessToken}` }
-  });
+  }, 20000);
   const text = await response.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch (error) { data = null; }
@@ -895,6 +964,11 @@ function start(options) {
   const status = document.getElementById("funcStatus");
   let sheetLink = "";
   let guideReady = false;
+  let pendingLogin = null;
+
+  function loggedIn() {
+    return Boolean(accessToken && Date.now() < tokenExpiresAt);
+  }
 
   function setStatus(text) {
     if (!status) return;
@@ -995,24 +1069,14 @@ function start(options) {
   if (importButton && fileInput) {
     importButton.addEventListener("click", () => {
       if (!guideReady) return;
+      // 選檔必須在這次點擊裡立刻打開。登入視窗也要在同一次點擊發出；
+      // 等檔案視窗關掉再登入，瀏覽器會把視窗擋住，而且關掉視窗時不會回報，讀取就會一直停住。
+      const loginInFlight = tokenWait && tokenWait.prompt !== "none" && pendingLogin;
+      if (GOOGLE_CLIENT_ID && googleReady() && !loggedIn() && !loginInFlight) {
+        pendingLogin = requestToken("").catch(() => {});
+      }
       fileInput.value = "";
-      const openFile = () => fileInput.click();
-      const openAccount = () => {
-        loadAccountDeckOnce().catch(() => {});
-      };
-      if (!GOOGLE_CLIENT_ID || !googleReady()) {
-        openFile();
-        return;
-      }
-      if (accessToken && Date.now() < tokenExpiresAt) {
-        openAccount();
-        openFile();
-        return;
-      }
-      requestToken("").then(() => {
-        openAccount();
-        openFile();
-      }).catch(openFile);
+      fileInput.click();
     });
 
     fileInput.addEventListener("change", async () => {
@@ -1027,10 +1091,19 @@ function start(options) {
         return;
       }
 
+      let loginPromise = pendingLogin;
+      pendingLogin = null;
+      if (!loggedIn() && GOOGLE_CLIENT_ID && googleReady() && !tokenWait) {
+        loginPromise = requestToken("").catch(() => {});
+      }
+
       setBusy(true);
       enrichToken += 1;
-      setStatus("正在讀取這個帳號的單字卡…");
-      if (accessToken && Date.now() < tokenExpiresAt) {
+      if (!loggedIn()) setStatus("請在 Google 視窗完成登入，才能讀取這個帳號的單字卡…");
+      else setStatus("正在讀取這個帳號的單字卡…");
+      if (loginPromise) await loginPromise;
+      if (loggedIn()) {
+        setStatus("正在讀取這個帳號的單字卡…");
         try { await loadAccountDeckOnce(); } catch (error) { /* 讀不到時仍處理這次選的檔案。 */ }
       }
       setStatus("正在讀取，並補上缺少的音標、中文和例句…");
@@ -1139,17 +1212,22 @@ function start(options) {
     if (guideReady) return;
     guideReady = true;
     setGuideLock(false);
-    setTimeout(async () => {
-      if (GOOGLE_CLIENT_ID && googleReady()) {
-        try {
-          await requestToken("none");
-          await loadAccountDeckOnce();
-        } catch (error) {
-          /* 沒有現成的 Google 登入時，先用內建單字。匯入時會再登入並讀取這個帳號的單字卡。 */
+    // 要在「知道了」這次點擊裡立刻開登入視窗。延後呼叫會被瀏覽器擋住。
+    const login = (async () => {
+      if (!(GOOGLE_CLIENT_ID && googleReady())) return;
+      try {
+        if (!loggedIn()) {
+          setStatus("請登入 Google 帳號，才能使用這個帳號的單字卡。");
+          await requestToken("");
         }
+        setStatus("正在讀取這個帳號的單字卡…");
+        await loadAccountDeckOnce();
+      } catch (error) {
+        if (!loggedIn()) setStatus("還沒登入 Google。匯入單字時會再請你登入。");
+        else setStatus("這個帳號的單字卡暫時讀不到，稍後匯入時會再試一次。");
       }
-      repairDeck();
-    }, 0);
+    })();
+    login.then(() => repairDeck());
   }
 
   return { words: deckWords, releaseGuide };
